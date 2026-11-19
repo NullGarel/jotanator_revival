@@ -9,3 +9,10 @@ DISCORD_BOT_TOKEN=XXX
 SERP_API_KEY=XXX
 SYNC_ON_START=1
 ```
+
+- Run it on background
+
+```bash
+nohup python main.py > bot.log 2>&1 &
+echo $! > bot.pid
+```
