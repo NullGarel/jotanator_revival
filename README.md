@@ -1,6 +1,6 @@
 # Jotanator (C# / Discord.Net port)
 
-A silly stupid (partially, at least for now, vibe coded) discord bot that adds fun functionalities.
+A silly stupid (practically fully vibe coded) discord bot that adds fun functionalities.
 Port of the original Python bot; same commands, same prefixes (`j.` / `J.` / `@Bot`), same slash commands.
 
 ## Requirements
