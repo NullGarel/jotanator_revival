@@ -1,4 +1,4 @@
-<!-- VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-20 @ 22:42 UTC -->
+<!-- VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-28 @ 19:27 UTC -->
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
@@ -13,6 +13,10 @@
 
   <ItemGroup>
     <PackageReference Include="Discord.Net" Version="3.18.0" />
+    <!-- Jotacoin economy database -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.*" />
+    <!-- image commands (fliph, neg, hue, ...) -->
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.*" />
   </ItemGroup>
 
 </Project>

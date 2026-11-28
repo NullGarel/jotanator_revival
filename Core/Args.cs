@@ -1,4 +1,4 @@
-// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-20 @ 22:42 UTC
+// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-28 @ 19:27 UTC
 using Discord;
 
 namespace Jotanator;
@@ -13,4 +13,10 @@ public sealed class Args
     public string? Str(string name) => _values.TryGetValue(name, out var v) ? v as string : null;
 
     public IGuildUser? Member(string name) => _values.TryGetValue(name, out var v) ? v as IGuildUser : null;
+
+    public IUser? User(string name) => _values.TryGetValue(name, out var v) ? v as IUser : null;
+
+    public long? Int(string name) => _values.TryGetValue(name, out var v) && v is long n ? n : null;
+
+    public IAttachment? Attachment(string name) => _values.TryGetValue(name, out var v) ? v as IAttachment : null;
 }

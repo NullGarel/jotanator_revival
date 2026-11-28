@@ -1,4 +1,4 @@
-// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-20 @ 22:42 UTC
+// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-28 @ 19:27 UTC
 using Discord;
 using Discord.WebSocket;
 
@@ -89,6 +89,40 @@ public sealed class CommandContext : IDisposable
         if (Channel == null) return null;
         return await Channel.SendMessageAsync(text, embed: embed, components: components,
             allowedMentions: allowedMentions);
+    }
+
+    /// <summary>Sends one or more files (as attachments) with an optional text.</summary>
+    public async Task<IUserMessage?> SendFilesAsync(
+        IEnumerable<FileAttachment> files,
+        string? text = null,
+        bool ephemeral = false,
+        AllowedMentions? allowedMentions = null)
+    {
+        var list = files.ToList();
+
+        if (Interaction != null)
+        {
+            if (!_responded)
+            {
+                _responded = true;
+                await Interaction.RespondWithFilesAsync(list, text, ephemeral: ephemeral, allowedMentions: allowedMentions);
+                return null;
+            }
+
+            return await Interaction.FollowupWithFilesAsync(list, text, ephemeral: ephemeral, allowedMentions: allowedMentions);
+        }
+
+        if (Channel == null) return null;
+        return await Channel.SendFilesAsync(list, text, allowedMentions: allowedMentions);
+    }
+
+    /// <summary>The channel the command was used in, fetching it if it isn't cached (slash commands).</summary>
+    public async Task<IMessageChannel?> GetChannelAsync()
+    {
+        if (Channel != null) return Channel;
+        var id = Interaction?.ChannelId;
+        if (id == null) return null;
+        return await Bot.Client.GetChannelAsync(id.Value) as IMessageChannel;
     }
 
     public void Dispose()

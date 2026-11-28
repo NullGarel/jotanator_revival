@@ -1,4 +1,4 @@
-// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-20 @ 22:42 UTC
+// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-28 @ 19:27 UTC
 namespace Jotanator;
 
 /// <summary>Put on a cog class to stop the loader from picking it up (like a leading "_" in the Python version).</summary>
@@ -22,6 +22,9 @@ public abstract class Cog
             return n.EndsWith("Cog", StringComparison.Ordinal) ? n[..^3] : n;
         }
     }
+
+    /// <summary>Section title in the help list. Several cogs can share one category.</summary>
+    public virtual string Category => Name;
 
     public abstract IEnumerable<CommandDef> BuildCommands();
 

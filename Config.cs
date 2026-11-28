@@ -1,4 +1,4 @@
-// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-20 @ 22:42 UTC
+// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-28 @ 19:27 UTC
 namespace Jotanator;
 
 /// <summary>Settings from the environment / .env file (port of config.py).</summary>
@@ -7,6 +7,11 @@ public static class Config
     public static readonly string Token;
     public static readonly string SerpApiKey;
     public static readonly bool SyncOnStart;
+
+    // Economy (Jotacoin, J$)
+    public static readonly string DbPath;          // SQLite file with balances, stats and history
+    public static readonly long StartBalance;      // what a brand-new account starts with
+    public static readonly int PayFeePercent;      // burned on every j.pay (anti alt-farming, and a money sink)
 
     public const string Prefix = "j.";
     // Both cases accepted; "@Bot command" also works (added in JotaBot).
@@ -23,6 +28,9 @@ public static class Config
         Token = Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN") ?? "";
         SerpApiKey = Environment.GetEnvironmentVariable("SERP_API_KEY") ?? "";
         SyncOnStart = (Environment.GetEnvironmentVariable("SYNC_ON_START") ?? "1") == "1";
+        DbPath = Environment.GetEnvironmentVariable("DB_PATH") is { Length: > 0 } db ? db : "jotanator.db";
+        StartBalance = long.TryParse(Environment.GetEnvironmentVariable("START_BALANCE"), out var sb) && sb >= 0 ? sb : 100;
+        PayFeePercent = int.TryParse(Environment.GetEnvironmentVariable("PAY_FEE_PERCENT"), out var fee) && fee is >= 0 and <= 50 ? fee : 5;
     }
 
     /// <summary>Tiny .env loader: finds the nearest .env walking upwards; never overrides real env vars.</summary>

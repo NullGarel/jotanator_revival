@@ -1,4 +1,4 @@
-// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-20 @ 22:42 UTC
+// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-28 @ 19:27 UTC
 namespace Jotanator;
 
 /// <summary>Minimal argument reader for prefix commands (words, "quoted words", rest-of-line).</summary>
@@ -8,6 +8,9 @@ internal sealed class StringView
     private int _i;
 
     public StringView(string s) => _s = s;
+
+    /// <summary>Current read position (can be rewound).</summary>
+    public int Position { get => _i; set => _i = value; }
 
     public void SkipWhitespace()
     {

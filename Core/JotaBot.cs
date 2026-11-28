@@ -1,4 +1,4 @@
-// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-20 @ 22:42 UTC
+// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-28 @ 19:27 UTC
 using System.Net;
 using System.Reflection;
 using Discord;
@@ -14,6 +14,9 @@ public sealed class JotaBot : IAsyncDisposable
 {
     public DiscordSocketClient Client { get; }
     public HttpClient Http { get; }
+
+    /// <summary>The Jotacoin economy (SQLite). Shared by every cog that touches J$.</summary>
+    public Economy Economy { get; }
 
     /// <summary>Raised for every failed command (the Errors cog subscribes to this).</summary>
     public event Func<CommandContext, Exception, Task>? CommandError;
@@ -36,6 +39,8 @@ public sealed class JotaBot : IAsyncDisposable
             LogLevel = LogSeverity.Info,
             UseInteractionSnowflakeDate = false,
         });
+
+        Economy = new Economy(Config.DbPath);
 
         Http = new HttpClient(new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All })
         {
@@ -139,6 +144,17 @@ public sealed class JotaBot : IAsyncDisposable
 
     public async Task<int> RunAsync(string token)
     {
+        try
+        {
+            var refunded = await Economy.InitAsync();
+            Logger.Info($"Economy ready ({Config.DbPath})" + (refunded > 0 ? $", refunded {refunded} unfinished game stake(s)" : ""));
+        }
+        catch (Exception e)
+        {
+            Logger.Error("Could not open the economy database", e);
+            return 1;
+        }
+
         await LoadAllCogsAsync();
 
         Client.Log += Logger.FromDiscord;

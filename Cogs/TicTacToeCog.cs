@@ -1,15 +1,13 @@
-// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-23 @ 16:57 UTC
-using System.Collections.Concurrent;
+// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-28 @ 19:27 UTC
 using Discord;
 using Discord.WebSocket;
 
 namespace Jotanator;
 
-/// <summary>Play tic tac toe against the bot with a 3x3 grid of buttons.</summary>
-public sealed class TicTacToeCog : Cog
+/// <summary>Tic tac toe against the bot (easy / medium / hard) or against another member.</summary>
+public sealed class TicTacToeCog : GameCog
 {
-    private static readonly string[] Difficulties = ["easy", "medium", "hard"];
-    private readonly ConcurrentDictionary<string, TttGame> _games = new();
+    protected override string Key => "ttt";
 
     public override IEnumerable<CommandDef> BuildCommands()
     {
@@ -17,340 +15,113 @@ public sealed class TicTacToeCog : Cog
         {
             Name = "tictactoe",
             Aliases = ["ttt"],
-            Description = "Play tic tac toe against the bot",
-            Help = "Play tic tac toe against the bot. Difficulty is easy, medium (default) or hard (unbeatable). " +
-                   "Example: `j.ttt hard`",
-            Params =
-            [
-                new ParamDef("difficulty", "easy, medium or hard", Required: false,
-                    Autocomplete: (bot, current) =>
-                        Difficulties.Where(d => d.Contains(current, StringComparison.OrdinalIgnoreCase))),
-            ],
+            Description = "Play tic tac toe against the bot or another member",
+            Help = "Play tic tac toe on a 3x3 button grid. Mention a member to challenge them (a small J$ wager " +
+                   "goes to the winner); leave it out to play me. Difficulty: easy, medium (default) or hard (unbeatable).\n" +
+                   "Examples: `j.ttt`, `j.ttt hard`, `j.ttt @friend`",
+            Params = [GameParams.Opponent(), GameParams.Difficulty()],
             Cooldowns = [new CooldownSpec(1, 5, BucketType.User)],
             Handler = PlayAsync,
         };
     }
 
-    public override Task OnLoadAsync()
-    {
-        Bot.Client.ButtonExecuted += OnButtonAsync;
-        return Task.CompletedTask;
-    }
-
-    public override Task OnUnloadAsync()
-    {
-        Bot.Client.ButtonExecuted -= OnButtonAsync;
-        return Task.CompletedTask;
-    }
-
     private async Task PlayAsync(CommandContext ctx)
     {
-        var raw = ctx.Args.Str("difficulty")?.Trim().ToLowerInvariant();
-        var difficulty = string.IsNullOrEmpty(raw) ? "medium" : raw;
-        if (!Difficulties.Contains(difficulty))
-            throw new BadArgumentException("Difficulty must be `easy`, `medium` or `hard`.");
-
-        var game = new TttGame(ctx.Author.Id, difficulty, id => _games.TryRemove(id, out _));
-        _games[game.Id] = game;
-
-        game.Message = await ctx.SendAsync(game.Content(), components: game.Components(), wantMessage: true);
-        game.ResetTimeout();
-    }
-
-    private Task OnButtonAsync(SocketMessageComponent component)
-    {
-        // custom id format: ttt:<gameId>:<cell 0-8 | quit>
-        var parts = component.Data.CustomId.Split(':');
-        if (parts.Length != 3 || parts[0] != "ttt") return Task.CompletedTask;
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                if (!_games.TryGetValue(parts[1], out var game))
-                {
-                    await component.RespondAsync("This game has ended. Start a new one.", ephemeral: true);
-                    return;
-                }
-
-                await game.HandleAsync(component, parts[2]);
-            }
-            catch (Exception e)
-            {
-                Logger.Error("Tic tac toe button failed", e);
-            }
-        });
-
-        return Task.CompletedTask;
+        var opponent = ResolveOpponent(ctx, ctx.Args.User("opponent"));
+        var difficulty = ParseDifficulty(ctx.Args.Str("difficulty"));
+        await LaunchAsync(ctx, new TttSession(Bot, ctx.Author, opponent, difficulty, Remove));
     }
 }
 
-/// <summary>State and rules of one game. The human is X and moves first; the bot is O.</summary>
-internal sealed class TttGame
+internal sealed class TttSession : GameSession
 {
-    private const char Human = 'X';
-    private const char Me = 'O';
-
-    private static readonly int[][] Lines =
-    [
-        [0, 1, 2], [3, 4, 5], [6, 7, 8],   // rows
-        [0, 3, 6], [1, 4, 7], [2, 5, 8],   // columns
-        [0, 4, 8], [2, 4, 6],              // diagonals
-    ];
-
-    public string Id { get; } = Guid.NewGuid().ToString("N");
-    public IUserMessage? Message { get; set; }
-
-    private readonly ulong _userId;
+    private readonly TttBoard _board = new();
     private readonly string _difficulty;
-    private readonly Action<string> _onDone;
-    private readonly char[] _board = Enumerable.Repeat(' ', 9).ToArray();
-    private readonly SemaphoreSlim _gate = new(1, 1);
-    private CancellationTokenSource? _timeout;
-    private bool _over;
-    private string _result = "";
+    private int _turn = 1;
     private int[]? _winLine;
 
-    public TttGame(ulong userId, string difficulty, Action<string> onDone)
+    public TttSession(JotaBot bot, IUser p1, IUser? p2, string difficulty, Action<string> onDone)
+        : base(bot, "ttt", "Tic Tac Toe", p1, p2, stake: 0, friendlyStake: true, onDone)
     {
-        _userId = userId;
         _difficulty = difficulty;
-        _onDone = onDone;
     }
 
-    // ------------------------------------------------------------ rendering
+    protected override int TurnPlayer => _turn;
 
-    public string Content() =>
-        _over
-            ? $"**Tic Tac Toe** ({_difficulty})\n{_result}"
-            : $"**Tic Tac Toe** vs me ({_difficulty}): you are ❌, I'm ⭕\nYour turn!";
+    protected override long BotWinReward => _difficulty switch { "easy" => 4, "hard" => 16, _ => 8 };
 
-    public MessageComponent Components()
+    protected override string Content()
+    {
+        var head = $"{Header()}{(VsBot ? $" ({_difficulty})" : "")}\n❌ {PlayerLabel(1)}  vs  ⭕ {PlayerLabel(2)}";
+        return Over ? $"{head}\n{ResultText}" : $"{head}\n{PlayerLabel(_turn)}, it's your turn!";
+    }
+
+    protected override MessageComponent Components()
     {
         var builder = new ComponentBuilder();
 
         for (var i = 0; i < 9; i++)
         {
             var row = i / 3;
-            var id = $"ttt:{Id}:{i}";
+            var id = CId(i.ToString());
             var inWin = _winLine != null && _winLine.Contains(i);
 
-            if (_board[i] == Human)
+            if (_board.Cells[i] == TttBoard.X)
                 builder.WithButton("X", id, inWin ? ButtonStyle.Success : ButtonStyle.Danger, disabled: true, row: row);
-            else if (_board[i] == Me)
+            else if (_board.Cells[i] == TttBoard.O)
                 builder.WithButton("O", id, inWin ? ButtonStyle.Success : ButtonStyle.Primary, disabled: true, row: row);
             else
-                builder.WithButton(customId: id, emote: new Emoji("⬜"), style: ButtonStyle.Secondary,
-                    disabled: _over, row: row);
+                builder.WithButton(customId: id, emote: new Emoji("⬜"), style: ButtonStyle.Secondary, disabled: Over, row: row);
         }
 
-        builder.WithButton("Forfeit", $"ttt:{Id}:quit", ButtonStyle.Secondary, disabled: _over, row: 3);
+        builder.WithButton("Forfeit", CId("quit"), ButtonStyle.Secondary, disabled: Over, row: 3);
         return builder.Build();
     }
 
-    // ------------------------------------------------------------ timeout
-
-    /// <summary>(Re)starts the inactivity timer.</summary>
-    public void ResetTimeout()
+    protected override async Task OnActionAsync(SocketMessageComponent c, string action)
     {
-        var cts = new CancellationTokenSource();
-        Interlocked.Exchange(ref _timeout, cts)?.Cancel();
-
-        _ = Task.Run(async () =>
+        if (action == "quit")
         {
-            try { await Task.Delay(TimeSpan.FromSeconds(Config.ViewTimeoutSeconds), cts.Token); }
-            catch (OperationCanceledException) { return; }
-            await OnTimeoutAsync();
-        });
-    }
-
-    private void Stop()
-    {
-        Interlocked.Exchange(ref _timeout, null)?.Cancel();
-        _onDone(Id);
-    }
-
-    private async Task OnTimeoutAsync()
-    {
-        await _gate.WaitAsync();
-        try
-        {
-            if (_over) return;
-            _over = true;
-            _result = "⏰ Game timed out.";
-            _onDone(Id);
-
-            if (Message == null) return;
-            try
-            {
-                await Message.ModifyAsync(m =>
-                {
-                    m.Content = Content();
-                    m.Components = Components();
-                });
-            }
-            catch
-            {
-                // message deleted or token expired; nothing to do
-            }
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    // ------------------------------------------------------------ interaction
-
-    public async Task HandleAsync(SocketMessageComponent component, string action)
-    {
-        // only the player who started the game may click
-        if (component.User.Id != _userId)
-        {
-            await component.RespondAsync($"This isn't your game. Start your own with `{Config.Prefix}ttt`.",
-                ephemeral: true);
+            await ForfeitAsync(PlayerNumber(c.User.Id), "🏳️ Forfeited.", penalize: true);
+            await UpdateAsync(c);
             return;
         }
 
-        await _gate.WaitAsync();
-        try
+        if (!await RequireTurnAsync(c, _turn)) return;
+
+        if (!int.TryParse(action, out var cell) || cell is < 0 or >= 9 || _board.Cells[cell] != ' ')
         {
-            if (_over)
-            {
-                await component.DeferAsync();
-                return;
-            }
-
-            ResetTimeout();
-
-            if (action == "quit")
-            {
-                End("You forfeited. 🏳️");
-            }
-            else if (int.TryParse(action, out var cell) && cell is >= 0 and < 9 && _board[cell] == ' ')
-            {
-                _board[cell] = Human;
-                if (!CheckEnd())
-                {
-                    _board[PickBotMove()] = Me;
-                    CheckEnd();
-                }
-            }
-            else
-            {
-                await component.DeferAsync();
-                return;
-            }
-
-            await component.UpdateAsync(m =>
-            {
-                m.Content = Content();
-                m.Components = Components();
-            });
-
-            if (_over) Stop();
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    // ------------------------------------------------------------ game rules
-
-    private void End(string result)
-    {
-        _over = true;
-        _result = result;
-    }
-
-    /// <summary>Checks for a win or a draw and marks the game as over if so.</summary>
-    private bool CheckEnd()
-    {
-        var (winner, line) = Winner(_board);
-        if (winner == Human) { _winLine = line; End("You win! 🎉"); return true; }
-        if (winner == Me) { _winLine = line; End("I win! 😎"); return true; }
-        if (!_board.Contains(' ')) { End("It's a draw! 🤝"); return true; }
-        return false;
-    }
-
-    private static (char Who, int[]? Line) Winner(char[] b)
-    {
-        foreach (var l in Lines)
-            if (b[l[0]] != ' ' && b[l[0]] == b[l[1]] && b[l[1]] == b[l[2]])
-                return (b[l[0]], l);
-        return (' ', null);
-    }
-
-    private List<int> EmptyCells() =>
-        Enumerable.Range(0, 9).Where(i => _board[i] == ' ').ToList();
-
-    private int PickBotMove()
-    {
-        var empty = EmptyCells();
-
-        switch (_difficulty)
-        {
-            case "hard":
-                return BestMove(empty);
-
-            case "medium":
-                // win if possible, otherwise block, otherwise random
-                var move = FindLineMove(Me) ?? FindLineMove(Human);
-                if (move != null) return move.Value;
-                break;
+            await c.DeferAsync();
+            return;
         }
 
-        return empty[Random.Shared.Next(empty.Count)];
+        await PlaceAsync(cell);
+
+        if (!Over && VsBot)
+            await PlaceAsync(_board.PickMove(TttBoard.O, _difficulty));
+
+        await UpdateAsync(c);
     }
 
-    /// <summary>A cell that completes a line for the given player (two in a row + one empty), if any.</summary>
-    private int? FindLineMove(char who)
+    /// <summary>Places the current player's mark, then ends the game or passes the turn.</summary>
+    private async Task PlaceAsync(int cell)
     {
-        foreach (var l in Lines)
+        _board.Cells[cell] = _turn == 1 ? TttBoard.X : TttBoard.O;
+
+        var (winner, line) = _board.Winner();
+        if (winner != ' ')
         {
-            var mine = l.Count(i => _board[i] == who);
-            var free = l.Where(i => _board[i] == ' ').ToList();
-            if (mine == 2 && free.Count == 1) return free[0];
+            _winLine = line;
+            var side = winner == TttBoard.X ? Side.Player1 : Side.Player2;
+            await FinishAsync(side, $"🏆 {PlayerLabel(winner == TttBoard.X ? 1 : 2)} wins!");
         }
-        return null;
-    }
-
-    /// <summary>Minimax: picks randomly among the moves with the best score (unbeatable).</summary>
-    private int BestMove(List<int> empty)
-    {
-        var best = int.MinValue;
-        var candidates = new List<int>();
-
-        foreach (var i in empty)
+        else if (_board.IsFull)
         {
-            _board[i] = Me;
-            var score = Score(_board, botTurn: false, depth: 1);
-            _board[i] = ' ';
-
-            if (score > best) { best = score; candidates.Clear(); }
-            if (score == best) candidates.Add(i);
+            await FinishAsync(Side.Draw, "🤝 It's a draw!");
         }
-
-        return candidates[Random.Shared.Next(candidates.Count)];
-    }
-
-    private static int Score(char[] b, bool botTurn, int depth)
-    {
-        var (winner, _) = Winner(b);
-        if (winner == Me) return 10 - depth;
-        if (winner == Human) return depth - 10;
-        if (!b.Contains(' ')) return 0;
-
-        var best = botTurn ? int.MinValue : int.MaxValue;
-        for (var i = 0; i < 9; i++)
+        else
         {
-            if (b[i] != ' ') continue;
-            b[i] = botTurn ? Me : Human;
-            var score = Score(b, !botTurn, depth + 1);
-            b[i] = ' ';
-            best = botTurn ? Math.Max(best, score) : Math.Min(best, score);
+            _turn = 3 - _turn;
         }
-        return best;
     }
 }

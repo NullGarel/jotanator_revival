@@ -1,4 +1,4 @@
-// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-20 @ 22:42 UTC
+// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-28 @ 19:27 UTC
 using System.Text.RegularExpressions;
 using Discord;
 
@@ -36,9 +36,15 @@ public sealed class BotMissingPermissionsException : CheckFailureException
         : base($"Bot requires {PermNames.Format(missing)} permission(s) to run this command.") { }
 }
 
-public sealed class BadArgumentException : CommandException
+public class BadArgumentException : CommandException
 {
     public BadArgumentException(string message) : base(message) { }
+}
+
+/// <summary>An argument that doesn't look like the expected type (optional parameters skip over these).</summary>
+public sealed class NoMatchException : BadArgumentException
+{
+    public NoMatchException(string message) : base(message) { }
 }
 
 public sealed class MissingArgumentException : CommandException

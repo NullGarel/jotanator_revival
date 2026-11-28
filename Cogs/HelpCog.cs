@@ -1,4 +1,4 @@
-// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-20 @ 22:42 UTC
+// VIBE CODED DSICLAIMER - CLAUDE GENERATED AS OF 26-11-28 @ 19:27 UTC
 using Discord;
 
 namespace Jotanator;
@@ -32,10 +32,14 @@ public sealed class HelpCog : Cog
             .WithTitle("Commands")
             .WithDescription($"Prefix: `{Config.Prefix}`  •  commands marked **/** also work as slash commands.");
 
-        foreach (var cog in Bot.Cogs)
+        var sections = Bot.Cogs
+            .GroupBy(c => c.Category)
+            .OrderBy(g => g.Key, StringComparer.Ordinal);
+
+        foreach (var section in sections)
         {
             var lines = new List<string>();
-            foreach (var cmd in cog.Commands.OrderBy(c => c.Name, StringComparer.Ordinal))
+            foreach (var cmd in section.SelectMany(c => c.Commands).OrderBy(c => c.Name, StringComparer.Ordinal))
             {
                 if (!await UsableAsync(ctx, cmd)) continue;
                 var mark = cmd.Slash ? " **/**" : "";
@@ -44,7 +48,7 @@ public sealed class HelpCog : Cog
 
             if (lines.Count == 0) continue;
             var text = string.Join("\n", lines);
-            embed.AddField(cog.Name, text.Length > 1024 ? text[..1024] : text, inline: false);
+            embed.AddField(section.Key, text.Length > 1024 ? text[..1024] : text, inline: false);
         }
 
         embed.WithFooter($"{Config.Prefix}help <command> for details");
